@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Utility waiting for process to finish
+
+__author__ = "Jiří Zapletal"
+__license__ = "GPLv2"
+
+import sys
+import os
+import time
+
+if len(sys.argv) == 1:
+	print "Usage: %s <pid> [pid...]" % sys.argv[0]
+	sys.exit(1)
+
+for pid in sys.argv[1:]:
+	pid = int(pid)
+	print "Waiting for pid %d" % pid
+	while os.path.isdir('/proc/%d' % pid) == True:
+		time.sleep(1)
+	print "Done waiting for pid %d" % pid
+
+sys.exit(0)

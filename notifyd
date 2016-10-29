@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# This script receives messages over amqp bus and displays them as notifications
+
+__author__ = "Jiří Zapletal"
+__license__ = "GPLv2"
+
+import os
+import sys
+from datetime import datetime
+import socket
+
+from ConfigParser import RawConfigParser
+
+cp = RawConfigParser({
+	'user': None,
+	'password': None,
+	'host': None,
+	'exchange': None,
+	'queue': None,
+})
+cp.read(os.path.expanduser('~/.notifyd.ini'))
+
+config = {
+	'user': cp.get('main', 'user'),
+	'password': cp.get('main', 'password'),
+	'host': cp.get('main', 'host'),
+	'exchange': cp.get('main', 'exchange'),
+	'queue': cp.get('main', 'queue'),
+}
+
+import pika
+import sys
+import time
+
+import subprocess
+def show(title, msg):
+	subprocess.call(
+		['/usr/bin/notify-send',
+		'-t', '0',
+		'-i', '/usr/share/pixmaps/pidgin/dialogs/scalable/info.svg',
+		'-c', 'info',
+		title,
+		msg
+		])
+
+import pika
+def connect(host, user, password):
+	credentials = pika.PlainCredentials(user, password)
+	connection = pika.BlockingConnection(
+		pika.ConnectionParameters(host=host, port=5671, credentials=credentials, ssl=True, heartbeat_interval=10)
+	)
+	return connection
+
+def bind(connection, exchange, queue, callback):
+	channel = connection.channel()
+	channel.exchange_declare(exchange=exchange, durable=True, exchange_type='fanout')
+	result = channel.queue_declare(queue=queue, durable=True)
+	queue_name = result.method.queue
+	channel.queue_bind(exchange=exchange, queue=queue_name, routing_key='')
+	channel.basic_consume(callback, queue=queue_name, no_ack=True)
+	return channel
+
+def callback(ch, method, properties, body):
+	print "New message received:"
+	print '  ' + body.replace('\n', '\n  ')
+	lines = body.splitlines()
+	show(lines[0], "\n".join(lines[1:]))
+
+if len(sys.argv) == 2 and sys.argv[1] == '-d':
+	print "Daemonizing"
+	from daemon import daemon
+	process = daemon.DaemonContext()
+	process.detach_process = True
+	process.open()
+
+connection = connect(config['host'], config['user'], config['password'])
+channel = bind(connection, config['exchange'], config['queue'], callback)
+channel.start_consuming()
